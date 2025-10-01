@@ -5,7 +5,7 @@ from diffusers import StableDiffusionPipeline
 import os
 
 # Получаем ID модели из переменной окружения или используем значение по умолчанию
-MODEL_ID = os.getenv("MODEL_ID", "NSFW-API/NSFW_Wan_14b")
+MODEL_ID = os.getenv("MODEL_ID", "runwayml/stable-diffusion-v1-5")
 
 print(f"Скачиваем модель {MODEL_ID}...")
 

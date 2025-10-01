@@ -9,7 +9,7 @@ import os
 
 app = FastAPI()
 
-MODEL_ID = os.getenv("MODEL_ID", "NSFW-API/NSFW_Wan_14b")
+MODEL_ID = os.getenv("MODEL_ID", "runwayml/stable-diffusion-v1-5")
 
 print(f"?? Загружаем модель {MODEL_ID}...")
 pipe = StableDiffusionPipeline.from_pretrained(
