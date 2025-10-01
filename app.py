@@ -14,7 +14,8 @@ MODEL_ID = os.getenv("MODEL_ID", "NSFW-API/NSFW_Wan_14b")
 print(f"?? Загружаем модель {MODEL_ID}...")
 pipe = StableDiffusionPipeline.from_pretrained(
     MODEL_ID,
-    torch_dtype=torch.float16
+    torch_dtype=torch.float16,
+    local_files_only=True  # <-- ВОТ ЭТО ИЗМЕНЕНИЕ
 ).to("cuda")
 
 class RequestBody(BaseModel):
