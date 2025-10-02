@@ -1,3 +1,4 @@
+# app.py
 import torch
 from diffusers import StableDiffusionPipeline
 from fastapi import FastAPI
@@ -6,17 +7,52 @@ import base64
 from io import BytesIO
 from PIL import Image
 import os
+from contextlib import asynccontextmanager
+import traceback # <-- Добавляем импорт для подробных логов
 
-app = FastAPI()
+# Создаем словарь для хранения нашей модели.
+# Это лучший способ управлять состоянием в FastAPI.
+ml_models = {}
 
-MODEL_ID = os.getenv("MODEL_ID", "runwayml/stable-diffusion-v1-5")
+# Эта функция будет выполняться при старте и остановке приложения
+@asynccontextmanager
+async def lifespan(app: FastAPI):
+    # --- Код, который выполняется при старте ---
+    print("Lifespan: Приложение запускается. Начинаем загрузку модели...")
+    try:
+        MODEL_ID = os.getenv("MODEL_ID", "runwayml/stable-diffusion-v1-5")
+        
+        # Загружаем модель из локальных файлов, которые мы "запекли" в образ
+        pipe = StableDiffusionPipeline.from_pretrained(
+            MODEL_ID,
+            torch_dtype=torch.float16,
+            use_safetensors=True,      # <-- Хорошая практика, указываем формат
+            local_files_only=True      # <-- УБЕДИТЕСЬ, ЧТО ЭТА СТРОКА ЕСТЬ!
+        ).to("cuda")
+        
+        ml_models["sd_pipeline"] = pipe
+        print("Lifespan: Модель успешно загружена и готова к работе!")
 
-print(f"?? Загружаем модель {MODEL_ID}...")
-pipe = StableDiffusionPipeline.from_pretrained(
-    MODEL_ID,
-    torch_dtype=torch.float16,
-    local_files_only=True  # <-- ВОТ ЭТО ИЗМЕНЕНИЕ
-).to("cuda")
+    except Exception as e:
+        # !!! ЭТО САМАЯ ВАЖНАЯ ЧАСТЬ !!!
+        # Если при загрузке модели произойдет ЛЮБАЯ ошибка, мы ее поймаем и распечатаем
+        print("!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!")
+        print("!!! КРИТИЧЕСКАЯ ОШИБКА ПРИ ЗАГРУЗКЕ МОДЕЛИ !!!")
+        print(f"!!! Тип ошибки: {type(e)}")
+        print(f"!!! Текст ошибки: {e}")
+        print("!!! Полный traceback ошибки:")
+        traceback.print_exc() # Распечатываем полный стектрейс ошибки в логи
+        print("!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!")
+
+    yield
+    
+    # --- Код, который выполняется при остановке ---
+    print("Lifespan: Приложение останавливается. Очищаем ресурсы.")
+    ml_models.clear()
+
+
+# Создаем приложение FastAPI и передаем ему нашу функцию lifespan
+app = FastAPI(lifespan=lifespan)
 
 class RequestBody(BaseModel):
     prompt: str
@@ -27,6 +63,13 @@ class RequestBody(BaseModel):
 
 @app.post("/generate")
 def generate(body: RequestBody):
+    # Проверяем, загрузилась ли модель
+    if "sd_pipeline" not in ml_models:
+        return {"error": "Модель не загружена из-за ошибки при старте. Проверьте логи."}
+
+    # Берем модель из нашего хранилища
+    pipe = ml_models["sd_pipeline"]
+    
     image = pipe(
         prompt=body.prompt,
         negative_prompt=body.negative_prompt,
